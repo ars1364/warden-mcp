@@ -31,11 +31,27 @@ func NewHandler(db *store.DB, box *crypto.Box) http.Handler {
 		}, getSecretHandler(db, box, key))
 		mcp.AddTool(server, &mcp.Tool{
 			Name:        "set_secret",
-			Description: "Create or update a secret's value, description and tags. Requires the write scope.",
+			Description: "Create or update a single-value (opaque) secret's value, description and tags. Requires the write scope.",
 		}, setSecretHandler(db, box, key))
+		mcp.AddTool(server, &mcp.Tool{
+			Name:        "get_totp_code",
+			Description: "Compute the current 6-digit code for a vaulted totp credential, without exposing its seed. Requires the read scope.",
+		}, getTOTPCodeHandler(db, box, key))
+		mcp.AddTool(server, &mcp.Tool{
+			Name:        "set_credential",
+			Description: "Create or update a multi-field credential (structured, totp, or reference type). Requires the write scope.",
+		}, setCredentialHandler(db, box, key))
 		return server
 	}
 
-	httpHandler := mcp.NewStreamableHTTPHandler(getServer, &mcp.StreamableHTTPOptions{Stateless: true})
+	httpHandler := mcp.NewStreamableHTTPHandler(getServer, &mcp.StreamableHTTPOptions{
+		Stateless: true,
+		// This server sits behind nginx, which proxies to us over 127.0.0.1 while preserving
+		// the original external Host header — exactly the shape the SDK's DNS-rebinding
+		// heuristic flags as suspicious. Auth is already enforced by authMiddleware's
+		// per-request wmcp_ token check, so that protection is redundant here and would
+		// otherwise reject all legitimate reverse-proxied traffic.
+		DisableLocalhostProtection: true,
+	})
 	return authMiddleware(db)(httpHandler)
 }

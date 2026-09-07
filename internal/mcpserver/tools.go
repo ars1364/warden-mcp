@@ -13,6 +13,7 @@ type secretMeta struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
 	Tags        []string `json:"tags"`
+	Type        string   `json:"type"`
 }
 
 type listSecretsOutput struct {
@@ -23,9 +24,14 @@ type getSecretArgs struct {
 	Name string `json:"name" jsonschema:"the secret's name"`
 }
 
+// getSecretOutput covers every secret type: Value is set for opaque secrets, Fields for
+// structured/totp/reference ones. A totp secret's Fields includes the raw seed here — use
+// get_totp_code instead when only the current code is needed, so the seed stays in the vault.
 type getSecretOutput struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
+	Name   string            `json:"name"`
+	Type   string            `json:"type"`
+	Value  string            `json:"value,omitempty"`
+	Fields map[string]string `json:"fields,omitempty"`
 }
 
 type setSecretArgs struct {
@@ -56,7 +62,7 @@ func listSecretsHandler(db *store.DB, key *store.APIKey) func(context.Context, *
 		}
 		out := listSecretsOutput{Secrets: []secretMeta{}}
 		for _, s := range secrets {
-			out.Secrets = append(out.Secrets, secretMeta{Name: s.Name, Description: s.Description, Tags: s.Tags})
+			out.Secrets = append(out.Secrets, secretMeta{Name: s.Name, Description: s.Description, Tags: s.Tags, Type: s.Type})
 		}
 		_ = db.WriteAudit(store.AuditEntry{ActorType: "mcp_key", ActorID: key.ID, ActorLabel: key.Name, Action: "read", Detail: "list_secrets"})
 		return nil, out, nil
@@ -68,16 +74,38 @@ func getSecretHandler(db *store.DB, box *crypto.Box, key *store.APIKey) func(con
 		if !hasScope(key, "read") {
 			return nil, getSecretOutput{}, fmt.Errorf("api key %q lacks read scope", key.Name)
 		}
-		id, nonce, ciphertext, err := db.GetSecretValueByName(args.Name)
+		meta, err := db.GetSecretMetaByName(args.Name)
 		if err != nil {
 			return nil, getSecretOutput{}, fmt.Errorf("secret %q not found", args.Name)
 		}
-		value, err := box.Open(nonce, ciphertext)
+
+		if meta.Type == store.TypeOpaque {
+			_, nonce, ciphertext, err := db.GetSecretValueByName(args.Name)
+			if err != nil {
+				return nil, getSecretOutput{}, err
+			}
+			value, err := box.Open(nonce, ciphertext)
+			if err != nil {
+				return nil, getSecretOutput{}, err
+			}
+			_ = db.WriteAudit(store.AuditEntry{ActorType: "mcp_key", ActorID: key.ID, ActorLabel: key.Name, Action: "read", SecretName: args.Name, Detail: meta.ID})
+			return nil, getSecretOutput{Name: args.Name, Type: meta.Type, Value: value}, nil
+		}
+
+		fields, err := db.GetSecretFields(meta.ID)
 		if err != nil {
 			return nil, getSecretOutput{}, err
 		}
-		_ = db.WriteAudit(store.AuditEntry{ActorType: "mcp_key", ActorID: key.ID, ActorLabel: key.Name, Action: "read", SecretName: args.Name, Detail: id})
-		return nil, getSecretOutput{Name: args.Name, Value: value}, nil
+		values := make(map[string]string, len(fields))
+		for _, f := range fields {
+			v, err := box.Open(f.Nonce, f.Ciphertext)
+			if err != nil {
+				return nil, getSecretOutput{}, err
+			}
+			values[f.Key] = v
+		}
+		_ = db.WriteAudit(store.AuditEntry{ActorType: "mcp_key", ActorID: key.ID, ActorLabel: key.Name, Action: "read", SecretName: args.Name, Detail: meta.ID})
+		return nil, getSecretOutput{Name: args.Name, Type: meta.Type, Fields: values}, nil
 	}
 }
 

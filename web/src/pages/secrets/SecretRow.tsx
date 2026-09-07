@@ -1,10 +1,13 @@
 import { useState } from 'react'
 import { api } from '../../lib/api'
 import { errorMessage } from '../../lib/errors'
-import type { SecretMeta, SecretWithValue } from '../../types/api'
+import type { SecretMeta, SecretType, SecretWithValue } from '../../types/api'
 import { MaskedValue } from '../../components/common/MaskedValue'
+import { CopyButton } from '../../components/common/CopyButton'
 import { TagChips } from '../../components/common/TagChips'
 import { Button } from '../../components/common/Button'
+import { TypeBadge } from './TypeBadge'
+import { TotpCodeButton } from './TotpCodeButton'
 
 interface SecretRowProps {
   secret: SecretMeta
@@ -14,7 +17,7 @@ interface SecretRowProps {
 
 export function SecretRow({ secret, onEdit, onDelete }: SecretRowProps) {
   const [revealed, setRevealed] = useState(false)
-  const [value, setValue] = useState<string | null>(null)
+  const [detail, setDetail] = useState<SecretWithValue | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -23,7 +26,7 @@ export function SecretRow({ secret, onEdit, onDelete }: SecretRowProps) {
       setRevealed(false)
       return
     }
-    if (value !== null) {
+    if (detail !== null) {
       setRevealed(true)
       return
     }
@@ -31,7 +34,7 @@ export function SecretRow({ secret, onEdit, onDelete }: SecretRowProps) {
     setError(null)
     try {
       const full = await api.get<SecretWithValue>(`/api/secrets/${secret.id}`)
-      setValue(full.value)
+      setDetail(full)
       setRevealed(true)
     } catch (err) {
       setError(errorMessage(err))
@@ -43,20 +46,24 @@ export function SecretRow({ secret, onEdit, onDelete }: SecretRowProps) {
   return (
     <tr className="border-b border-border last:border-0">
       <td className="px-4 py-3 align-top">
-        <div className="font-medium text-text-bright">{secret.name}</div>
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-text-bright">{secret.name}</span>
+          <TypeBadge type={secret.type} />
+        </div>
         <div className="text-xs text-text-muted">{secret.description}</div>
       </td>
       <td className="px-4 py-3 align-top">
         <TagChips tags={secret.tags} />
       </td>
       <td className="px-4 py-3 align-top">
-        <div className="w-56">
+        <div className="w-64">
+          {secret.type === 'totp' && <TotpCodeButton secretId={secret.id} />}
           {loading ? (
             <span className="text-xs text-text-muted">Loading…</span>
           ) : error ? (
             <span className="text-xs text-danger">{error}</span>
           ) : (
-            <MaskedValue value={value ?? ''} revealed={revealed} onToggle={handleToggleReveal} />
+            <SecretValueCell type={secret.type} detail={detail} revealed={revealed} onToggle={handleToggleReveal} />
           )}
         </div>
       </td>
@@ -74,5 +81,44 @@ export function SecretRow({ secret, onEdit, onDelete }: SecretRowProps) {
         </div>
       </td>
     </tr>
+  )
+}
+
+function SecretValueCell({
+  type,
+  detail,
+  revealed,
+  onToggle,
+}: {
+  type: SecretType
+  detail: SecretWithValue | null
+  revealed: boolean
+  onToggle: () => void
+}) {
+  if (type === 'opaque') {
+    return <MaskedValue value={detail?.value ?? ''} revealed={revealed} onToggle={onToggle} />
+  }
+
+  if (!revealed) {
+    return (
+      <button onClick={onToggle} type="button" className="text-xs font-medium text-accent hover:underline">
+        Reveal {detail?.fields?.length ?? ''} field(s)
+      </button>
+    )
+  }
+
+  return (
+    <div className="space-y-1 rounded-md border border-warn bg-warn-bg p-2">
+      {(detail?.fields ?? []).map((f) => (
+        <div key={f.key} className="flex items-center gap-2">
+          <code className="w-1/3 truncate text-xs text-text-muted">{f.key}</code>
+          <code className="flex-1 truncate font-mono text-xs text-warn">{f.value}</code>
+          <CopyButton value={f.value} />
+        </div>
+      ))}
+      <button onClick={onToggle} type="button" className="text-xs font-medium text-accent hover:underline">
+        Hide
+      </button>
+    </div>
   )
 }

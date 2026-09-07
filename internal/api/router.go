@@ -47,6 +47,7 @@ func NewRouter(db *store.DB, box *crypto.Box, jwt *authn.JWTIssuer, env string) 
 			pr.Get("/secrets/{id}", s.handleGetSecret)
 			pr.Put("/secrets/{id}", s.handleUpdateSecret)
 			pr.Delete("/secrets/{id}", s.handleDeleteSecret)
+			pr.Get("/secrets/{id}/totp-code", s.handleGetTOTPCode)
 
 			pr.Get("/apikeys", s.handleListAPIKeys)
 			pr.Post("/apikeys", s.handleCreateAPIKey)

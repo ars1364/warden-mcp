@@ -32,31 +32,51 @@ export interface TotpSetupResponse {
   otpauth_url: string
 }
 
+export type SecretType = 'opaque' | 'structured' | 'totp' | 'reference'
+
 export interface SecretMeta {
   id: string
   name: string
   description: string
   tags: string[]
+  type: SecretType
   created_by: string
   created_at: string
   updated_at: string
 }
 
-export interface SecretWithValue extends SecretMeta {
+export interface SecretField {
+  key: string
   value: string
 }
 
+// GET /api/secrets/:id — value is populated for opaque secrets, fields for the rest.
+export interface SecretWithValue extends SecretMeta {
+  value?: string
+  fields?: SecretField[]
+}
+
+// POST/PUT body: value is used for type "opaque", fields for the other three.
 export interface SecretInput {
   name: string
   description: string
   tags: string[]
+  type: SecretType
   value: string
+  fields: SecretField[]
 }
 
 export interface SecretUpdateInput {
   description: string
   tags: string[]
+  type: SecretType
   value: string
+  fields: SecretField[]
+}
+
+export interface TotpCodeResponse {
+  code: string
+  seconds_remaining: number
 }
 
 export type ApiKeyScope = 'read' | 'write'

@@ -17,15 +17,8 @@ func (s *Server) handleListSecrets(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, secrets)
 }
 
-type createSecretRequest struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Tags        []string `json:"tags"`
-	Value       string   `json:"value"`
-}
-
 func (s *Server) handleCreateSecret(w http.ResponseWriter, r *http.Request) {
-	var req createSecretRequest
+	var req secretRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_BODY", "malformed request body")
 		return
@@ -34,15 +27,28 @@ func (s *Server) handleCreateSecret(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "INVALID_BODY", "name is required")
 		return
 	}
-
-	nonce, ciphertext, err := s.box.Seal(req.Value)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "INTERNAL", "failed to encrypt value")
+	secretType := normalizeSecretType(req.Type)
+	if err := validateSecretFields(secretType, req.Fields); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_BODY", err.Error())
 		return
 	}
 
 	userID := userIDFromContext(r)
-	secret, err := s.db.CreateSecret(req.Name, req.Description, req.Tags, nonce, ciphertext, userID)
+	var secret *store.Secret
+	var err error
+
+	if secretType == store.TypeOpaque {
+		var nonce, ciphertext []byte
+		nonce, ciphertext, err = s.box.Seal(req.Value)
+		if err == nil {
+			secret, err = s.db.CreateSecret(req.Name, req.Description, req.Tags, nonce, ciphertext, userID)
+		}
+	} else {
+		secret, err = s.db.CreateSecretMeta(req.Name, req.Description, req.Tags, secretType, userID)
+		if err == nil {
+			err = s.sealAndReplaceFields(secret.ID, req.Fields)
+		}
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL", "failed to create secret")
 		return
@@ -69,13 +75,7 @@ func (s *Server) handleGetSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	nonce, ciphertext, err := s.db.GetSecretValueByID(id)
-	if err != nil {
-		s.writeSecretLookupError(w, err)
-		return
-	}
-
-	value, err := s.box.Open(nonce, ciphertext)
+	resp, err := s.readSecretDetail(meta)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL", "failed to decrypt value")
 		return
@@ -90,36 +90,47 @@ func (s *Server) handleGetSecret(w http.ResponseWriter, r *http.Request) {
 		IP:         r.RemoteAddr,
 	})
 
-	writeJSON(w, http.StatusOK, store.SecretWithValue{Secret: *meta, Value: value})
-}
-
-type updateSecretRequest struct {
-	Description string   `json:"description"`
-	Tags        []string `json:"tags"`
-	Value       string   `json:"value"`
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) handleUpdateSecret(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	var req updateSecretRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "INVALID_BODY", "malformed request body")
-		return
-	}
-
-	nonce, ciphertext, err := s.box.Seal(req.Value)
+	meta, err := s.db.GetSecretMeta(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "INTERNAL", "failed to encrypt value")
-		return
-	}
-
-	if err := s.db.UpdateSecret(id, req.Description, req.Tags, nonce, ciphertext); err != nil {
 		s.writeSecretLookupError(w, err)
 		return
 	}
 
-	meta, err := s.db.GetSecretMeta(id)
+	var req secretRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_BODY", "malformed request body")
+		return
+	}
+	if err := validateSecretFields(meta.Type, req.Fields); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_BODY", err.Error())
+		return
+	}
+
+	if meta.Type == store.TypeOpaque {
+		nonce, ciphertext, sealErr := s.box.Seal(req.Value)
+		if sealErr != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "failed to encrypt value")
+			return
+		}
+		err = s.db.UpdateSecret(id, req.Description, req.Tags, nonce, ciphertext)
+	} else {
+		err = s.db.UpdateSecretMeta(id, req.Description, req.Tags)
+		if err == nil {
+			err = s.sealAndReplaceFields(id, req.Fields)
+		}
+	}
+	if err != nil {
+		s.writeSecretLookupError(w, err)
+		return
+	}
+
+	meta, err = s.db.GetSecretMeta(id)
 	if err != nil {
 		s.writeSecretLookupError(w, err)
 		return
