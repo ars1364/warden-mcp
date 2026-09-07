@@ -1,5 +1,5 @@
 import type { SecretField } from '../../types/api'
-import { TextInput } from './FormField'
+import { TextInput, Textarea } from './FormField'
 import { Button } from './Button'
 
 interface FieldListEditorProps {
@@ -30,18 +30,18 @@ export function FieldListEditor({
   return (
     <div className="space-y-2">
       {fields.map((field, i) => (
-        <div key={i} className="flex items-center gap-2">
+        <div key={i} className="flex items-start gap-2">
           <TextInput
             value={field.key}
             onChange={(e) => update(i, { key: e.target.value })}
             placeholder={keyPlaceholder}
             className="w-1/3 font-mono"
           />
-          <TextInput
+          <Textarea
             value={field.value}
             onChange={(e) => update(i, { value: e.target.value })}
             placeholder={valuePlaceholder}
-            type="password"
+            rows={1}
             className="flex-1 font-mono"
           />
           <Button type="button" variant="ghost" onClick={() => remove(i)} aria-label="Remove field">

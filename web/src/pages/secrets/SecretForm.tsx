@@ -5,7 +5,7 @@ import type { SecretField, SecretMeta, SecretType, SecretWithValue } from '../..
 import { Modal } from '../../components/common/Modal'
 import { Button } from '../../components/common/Button'
 import { ErrorBanner } from '../../components/common/ErrorBanner'
-import { FormField, TextInput } from '../../components/common/FormField'
+import { FormField, TextInput, Textarea } from '../../components/common/FormField'
 import { TagInput } from '../../components/common/TagInput'
 import { FieldListEditor } from '../../components/common/FieldListEditor'
 
@@ -119,11 +119,10 @@ export function SecretForm({ editing, onClose, onSaved }: SecretFormProps) {
 
         {type === 'opaque' ? (
           <FormField label="Value">
-            <TextInput
-              type="password"
+            <Textarea
               value={value}
               onChange={(e) => setValue(e.target.value)}
-              placeholder={editing ? 'Re-enter value to save changes' : undefined}
+              placeholder={editing ? 'Re-enter value to save changes' : 'Paste any value — single line or multi-line (SSH keys, certs, JSON)'}
               className="font-mono"
               required
             />

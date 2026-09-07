@@ -110,9 +110,11 @@ function SecretValueCell({
   return (
     <div className="space-y-1 rounded-md border border-warn bg-warn-bg p-2">
       {(detail?.fields ?? []).map((f) => (
-        <div key={f.key} className="flex items-center gap-2">
-          <code className="w-1/3 truncate text-xs text-text-muted">{f.key}</code>
-          <code className="flex-1 truncate font-mono text-xs text-warn">{f.value}</code>
+        <div key={f.key} className="flex items-start gap-2">
+          <code className="w-1/3 shrink-0 truncate text-xs text-text-muted">{f.key}</code>
+          <code className="max-h-40 flex-1 overflow-auto whitespace-pre-wrap break-all font-mono text-xs text-warn">
+            {f.value}
+          </code>
           <CopyButton value={f.value} />
         </div>
       ))}

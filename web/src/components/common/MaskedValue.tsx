@@ -16,7 +16,11 @@ export function MaskedValue({ value, revealed, onToggle }: MaskedValueProps) {
         revealed ? 'border-warn bg-warn-bg' : 'border-border bg-bg'
       }`}
     >
-      <code className={`flex-1 truncate font-mono text-xs ${revealed ? 'text-warn' : 'text-text-muted'}`}>
+      <code
+        className={`max-h-40 flex-1 overflow-auto whitespace-pre-wrap break-all font-mono text-xs ${
+          revealed ? 'text-warn' : 'truncate text-text-muted'
+        }`}
+      >
         {revealed ? value : dots}
       </code>
       <button
