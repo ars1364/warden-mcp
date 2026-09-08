@@ -21,14 +21,15 @@ const (
 )
 
 type Secret struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	Tags        []string  `json:"tags"`
-	Type        string    `json:"type"`
-	CreatedBy   string    `json:"created_by"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	Tags        []string   `json:"tags"`
+	Type        string     `json:"type"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+	CreatedBy   string     `json:"created_by"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
 // SecretWithValue is only used internally when the plaintext must be returned (MCP get_secret, edit form prefill).
@@ -37,15 +38,15 @@ type SecretWithValue struct {
 	Value string `json:"value"`
 }
 
-func (db *DB) CreateSecret(name, description string, tags []string, nonce, ciphertext []byte, createdBy string) (*Secret, error) {
+func (db *DB) CreateSecret(name, description string, tags []string, nonce, ciphertext []byte, expiresAt *time.Time, createdBy string) (*Secret, error) {
 	tagsJSON, err := json.Marshal(tags)
 	if err != nil {
 		return nil, err
 	}
 	id := uuid.NewString()
 	_, err = db.Exec(
-		`INSERT INTO secrets (id, name, description, tags, nonce, ciphertext, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		id, name, description, string(tagsJSON), nonce, ciphertext, createdBy,
+		`INSERT INTO secrets (id, name, description, tags, nonce, ciphertext, expires_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, name, description, string(tagsJSON), nonce, ciphertext, expiresAt, createdBy,
 	)
 	if err != nil {
 		return nil, err
@@ -56,15 +57,15 @@ func (db *DB) CreateSecret(name, description string, tags []string, nonce, ciphe
 // CreateSecretMeta creates a structured/totp/reference secret's row without a top-level
 // value; its actual values live in secret_fields (see ReplaceSecretFields). nonce/ciphertext
 // are stored empty since the columns are NOT NULL but unused for these types.
-func (db *DB) CreateSecretMeta(name, description string, tags []string, secretType, createdBy string) (*Secret, error) {
+func (db *DB) CreateSecretMeta(name, description string, tags []string, secretType string, expiresAt *time.Time, createdBy string) (*Secret, error) {
 	tagsJSON, err := json.Marshal(tags)
 	if err != nil {
 		return nil, err
 	}
 	id := uuid.NewString()
 	_, err = db.Exec(
-		`INSERT INTO secrets (id, name, description, tags, type, nonce, ciphertext, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		id, name, description, string(tagsJSON), secretType, []byte{}, []byte{}, createdBy,
+		`INSERT INTO secrets (id, name, description, tags, type, nonce, ciphertext, expires_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, name, description, string(tagsJSON), secretType, []byte{}, []byte{}, expiresAt, createdBy,
 	)
 	if err != nil {
 		return nil, err
@@ -72,16 +73,16 @@ func (db *DB) CreateSecretMeta(name, description string, tags []string, secretTy
 	return db.GetSecretMeta(id)
 }
 
-// UpdateSecretMeta updates description/tags for a structured/totp/reference secret; its
-// field values are replaced separately via ReplaceSecretFields.
-func (db *DB) UpdateSecretMeta(id, description string, tags []string) error {
+// UpdateSecretMeta updates description/tags/expiry for a structured/totp/reference secret;
+// its field values are replaced separately via ReplaceSecretFields.
+func (db *DB) UpdateSecretMeta(id, description string, tags []string, expiresAt *time.Time) error {
 	tagsJSON, err := json.Marshal(tags)
 	if err != nil {
 		return err
 	}
 	res, err := db.Exec(
-		`UPDATE secrets SET description = ?, tags = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-		string(tagsJSON), id,
+		`UPDATE secrets SET description = ?, tags = ?, expires_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		description, string(tagsJSON), expiresAt, id,
 	)
 	if err != nil {
 		return err
@@ -89,14 +90,14 @@ func (db *DB) UpdateSecretMeta(id, description string, tags []string) error {
 	return checkRowsAffected(res)
 }
 
-func (db *DB) UpdateSecret(id, description string, tags []string, nonce, ciphertext []byte) error {
+func (db *DB) UpdateSecret(id, description string, tags []string, nonce, ciphertext []byte, expiresAt *time.Time) error {
 	tagsJSON, err := json.Marshal(tags)
 	if err != nil {
 		return err
 	}
 	res, err := db.Exec(
-		`UPDATE secrets SET description = ?, tags = ?, nonce = ?, ciphertext = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-		description, string(tagsJSON), nonce, ciphertext, id,
+		`UPDATE secrets SET description = ?, tags = ?, nonce = ?, ciphertext = ?, expires_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		description, string(tagsJSON), nonce, ciphertext, expiresAt, id,
 	)
 	if err != nil {
 		return err
@@ -113,7 +114,7 @@ func (db *DB) DeleteSecret(id string) error {
 }
 
 func (db *DB) ListSecrets() ([]Secret, error) {
-	rows, err := db.Query(`SELECT id, name, description, tags, type, created_by, created_at, updated_at FROM secrets ORDER BY name`)
+	rows, err := db.Query(`SELECT id, name, description, tags, type, expires_at, created_by, created_at, updated_at FROM secrets ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +132,7 @@ func (db *DB) ListSecrets() ([]Secret, error) {
 }
 
 func (db *DB) GetSecretMeta(id string) (*Secret, error) {
-	row := db.QueryRow(`SELECT id, name, description, tags, type, created_by, created_at, updated_at FROM secrets WHERE id = ?`, id)
+	row := db.QueryRow(`SELECT id, name, description, tags, type, expires_at, created_by, created_at, updated_at FROM secrets WHERE id = ?`, id)
 	s, err := scanSecret(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -145,7 +146,7 @@ func (db *DB) GetSecretMeta(id string) (*Secret, error) {
 // GetSecretMetaByName looks up a secret's metadata (including type) by name, used by the
 // MCP tools to decide whether to read secrets.ciphertext (opaque) or secret_fields (other types).
 func (db *DB) GetSecretMetaByName(name string) (*Secret, error) {
-	row := db.QueryRow(`SELECT id, name, description, tags, type, created_by, created_at, updated_at FROM secrets WHERE name = ?`, name)
+	row := db.QueryRow(`SELECT id, name, description, tags, type, expires_at, created_by, created_at, updated_at FROM secrets WHERE name = ?`, name)
 	s, err := scanSecret(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -183,7 +184,7 @@ type rowScanner interface {
 func scanSecret(row rowScanner) (Secret, error) {
 	var s Secret
 	var tagsJSON string
-	if err := row.Scan(&s.ID, &s.Name, &s.Description, &tagsJSON, &s.Type, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt); err != nil {
+	if err := row.Scan(&s.ID, &s.Name, &s.Description, &tagsJSON, &s.Type, &s.ExpiresAt, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt); err != nil {
 		return Secret{}, err
 	}
 	if err := json.Unmarshal([]byte(tagsJSON), &s.Tags); err != nil || s.Tags == nil {

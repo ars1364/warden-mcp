@@ -68,6 +68,7 @@ type setCredentialArgs struct {
 	Fields      map[string]string `json:"fields" jsonschema:"key/value pairs; a totp credential requires a 'seed' key"`
 	Description string            `json:"description,omitempty"`
 	Tags        []string          `json:"tags,omitempty"`
+	ExpiresAt   string            `json:"expires_at,omitempty" jsonschema:"optional YYYY-MM-DD expiry date"`
 }
 
 type setCredentialOutput struct {
@@ -93,6 +94,10 @@ func setCredentialHandler(db *store.DB, box *crypto.Box, key *store.APIKey) func
 				return nil, setCredentialOutput{}, fmt.Errorf("totp credentials require a non-empty 'seed' field")
 			}
 		}
+		expiresAt, err := parseExpiresAt(args.ExpiresAt)
+		if err != nil {
+			return nil, setCredentialOutput{}, err
+		}
 
 		sealed := make([]store.FieldCiphertext, 0, len(args.Fields))
 		i := 0
@@ -107,12 +112,12 @@ func setCredentialHandler(db *store.DB, box *crypto.Box, key *store.APIKey) func
 
 		meta, err := db.GetSecretMetaByName(args.Name)
 		if err != nil {
-			meta, err = db.CreateSecretMeta(args.Name, args.Description, args.Tags, secretType, "mcp:"+key.Name)
+			meta, err = db.CreateSecretMeta(args.Name, args.Description, args.Tags, secretType, expiresAt, "mcp:"+key.Name)
 			if err != nil {
 				return nil, setCredentialOutput{}, err
 			}
 		} else {
-			if updErr := db.UpdateSecretMeta(meta.ID, args.Description, args.Tags); updErr != nil {
+			if updErr := db.UpdateSecretMeta(meta.ID, args.Description, args.Tags, expiresAt); updErr != nil {
 				return nil, setCredentialOutput{}, updErr
 			}
 		}

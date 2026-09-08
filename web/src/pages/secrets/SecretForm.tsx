@@ -31,6 +31,7 @@ export function SecretForm({ editing, onClose, onSaved }: SecretFormProps) {
   const [fields, setFields] = useState<SecretField[]>(
     editing?.type === 'totp' ? [{ key: 'seed', value: '' }] : [],
   )
+  const [expiresAt, setExpiresAt] = useState(editing?.expires_at ?? '')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -69,9 +70,18 @@ export function SecretForm({ editing, onClose, onSaved }: SecretFormProps) {
           type,
           value,
           fields,
+          expires_at: expiresAt,
         })
       } else {
-        await api.post<SecretWithValue>('/api/secrets', { name, description, tags, type, value, fields })
+        await api.post<SecretWithValue>('/api/secrets', {
+          name,
+          description,
+          tags,
+          type,
+          value,
+          fields,
+          expires_at: expiresAt,
+        })
       }
       onSaved()
     } catch (err) {
@@ -97,6 +107,21 @@ export function SecretForm({ editing, onClose, onSaved }: SecretFormProps) {
         </FormField>
         <FormField label="Tags">
           <TagInput tags={tags} onChange={setTags} />
+        </FormField>
+        <FormField label="Expires">
+          <div className="flex items-center gap-2">
+            <TextInput
+              type="date"
+              value={expiresAt}
+              onChange={(e) => setExpiresAt(e.target.value)}
+              className="w-auto"
+            />
+            {expiresAt && (
+              <Button type="button" variant="ghost" onClick={() => setExpiresAt('')}>
+                Clear
+              </Button>
+            )}
+          </div>
         </FormField>
 
         <FormField label="Type">

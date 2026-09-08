@@ -8,8 +8,8 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- `type` is added via migrateAddSecretType in db.go for pre-existing databases;
--- CREATE TABLE only covers fresh installs.
+-- `type` and `expires_at` are added via addColumnIfMissing in db.go for pre-existing
+-- databases; CREATE TABLE only covers fresh installs.
 CREATE TABLE IF NOT EXISTS secrets (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS secrets (
     type TEXT NOT NULL DEFAULT 'opaque',
     nonce BLOB NOT NULL,
     ciphertext BLOB NOT NULL,
+    expires_at TIMESTAMP,
     created_by TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP

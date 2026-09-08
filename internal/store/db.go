@@ -35,24 +35,27 @@ func Open(path string) (*DB, error) {
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
 
-	if err := migrateAddSecretType(sqlDB); err != nil {
+	if err := addColumnIfMissing(sqlDB, "secrets", "type", `ALTER TABLE secrets ADD COLUMN type TEXT NOT NULL DEFAULT 'opaque'`); err != nil {
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
+	if err := addColumnIfMissing(sqlDB, "secrets", "expires_at", `ALTER TABLE secrets ADD COLUMN expires_at TIMESTAMP`); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 
 	return &DB{sqlDB}, nil
 }
 
-// migrateAddSecretType backfills the secrets.type column for databases created before
-// it existed. ALTER TABLE ADD COLUMN has no "IF NOT EXISTS" form in SQLite, so we check
-// PRAGMA table_info first; schema.sql's CREATE TABLE already covers fresh installs.
-func migrateAddSecretType(db *sql.DB) error {
-	rows, err := db.Query(`PRAGMA table_info(secrets)`)
+// addColumnIfMissing backfills a column added after a database's initial schema was applied.
+// ALTER TABLE ADD COLUMN has no "IF NOT EXISTS" form in SQLite, so we check PRAGMA table_info
+// first; schema.sql's CREATE TABLE already covers fresh installs.
+func addColumnIfMissing(db *sql.DB, table, column, alterSQL string) error {
+	rows, err := db.Query(`PRAGMA table_info(` + table + `)`)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 
-	hasType := false
+	has := false
 	for rows.Next() {
 		var cid int
 		var name, colType string
@@ -61,16 +64,16 @@ func migrateAddSecretType(db *sql.DB) error {
 		if err := rows.Scan(&cid, &name, &colType, &notNull, &dflt, &pk); err != nil {
 			return err
 		}
-		if name == "type" {
-			hasType = true
+		if name == column {
+			has = true
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return err
 	}
 
-	if !hasType {
-		if _, err := db.Exec(`ALTER TABLE secrets ADD COLUMN type TEXT NOT NULL DEFAULT 'opaque'`); err != nil {
+	if !has {
+		if _, err := db.Exec(alterSQL); err != nil {
 			return err
 		}
 	}

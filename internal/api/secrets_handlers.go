@@ -32,19 +32,23 @@ func (s *Server) handleCreateSecret(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "INVALID_BODY", err.Error())
 		return
 	}
+	expiresAt, err := parseExpiresAt(req.ExpiresAt)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_BODY", err.Error())
+		return
+	}
 
 	userID := userIDFromContext(r)
 	var secret *store.Secret
-	var err error
 
 	if secretType == store.TypeOpaque {
 		var nonce, ciphertext []byte
 		nonce, ciphertext, err = s.box.Seal(req.Value)
 		if err == nil {
-			secret, err = s.db.CreateSecret(req.Name, req.Description, req.Tags, nonce, ciphertext, userID)
+			secret, err = s.db.CreateSecret(req.Name, req.Description, req.Tags, nonce, ciphertext, expiresAt, userID)
 		}
 	} else {
-		secret, err = s.db.CreateSecretMeta(req.Name, req.Description, req.Tags, secretType, userID)
+		secret, err = s.db.CreateSecretMeta(req.Name, req.Description, req.Tags, secretType, expiresAt, userID)
 		if err == nil {
 			err = s.sealAndReplaceFields(secret.ID, req.Fields)
 		}
@@ -111,6 +115,11 @@ func (s *Server) handleUpdateSecret(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "INVALID_BODY", err.Error())
 		return
 	}
+	expiresAt, err := parseExpiresAt(req.ExpiresAt)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_BODY", err.Error())
+		return
+	}
 
 	if meta.Type == store.TypeOpaque {
 		nonce, ciphertext, sealErr := s.box.Seal(req.Value)
@@ -118,9 +127,9 @@ func (s *Server) handleUpdateSecret(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "INTERNAL", "failed to encrypt value")
 			return
 		}
-		err = s.db.UpdateSecret(id, req.Description, req.Tags, nonce, ciphertext)
+		err = s.db.UpdateSecret(id, req.Description, req.Tags, nonce, ciphertext, expiresAt)
 	} else {
-		err = s.db.UpdateSecretMeta(id, req.Description, req.Tags)
+		err = s.db.UpdateSecretMeta(id, req.Description, req.Tags, expiresAt)
 		if err == nil {
 			err = s.sealAndReplaceFields(id, req.Fields)
 		}

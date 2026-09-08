@@ -3,17 +3,41 @@ package mcpserver
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/ars1364/warden-mcp/internal/crypto"
 	"github.com/ars1364/warden-mcp/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// expiresAtLayout is the plain "YYYY-MM-DD" date format used on both sides of every MCP
+// expires_at field, mirroring the REST API's format.
+const expiresAtLayout = "2006-01-02"
+
+func parseExpiresAt(s string) (*time.Time, error) {
+	if s == "" {
+		return nil, nil
+	}
+	t, err := time.Parse(expiresAtLayout, s)
+	if err != nil {
+		return nil, fmt.Errorf("expires_at must be a YYYY-MM-DD date")
+	}
+	return &t, nil
+}
+
+func formatExpiresAt(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.Format(expiresAtLayout)
+}
+
 type secretMeta struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
 	Tags        []string `json:"tags"`
 	Type        string   `json:"type"`
+	ExpiresAt   string   `json:"expires_at,omitempty"`
 }
 
 type listSecretsOutput struct {
@@ -28,10 +52,11 @@ type getSecretArgs struct {
 // structured/totp/reference ones. A totp secret's Fields includes the raw seed here — use
 // get_totp_code instead when only the current code is needed, so the seed stays in the vault.
 type getSecretOutput struct {
-	Name   string            `json:"name"`
-	Type   string            `json:"type"`
-	Value  string            `json:"value,omitempty"`
-	Fields map[string]string `json:"fields,omitempty"`
+	Name      string            `json:"name"`
+	Type      string            `json:"type"`
+	Value     string            `json:"value,omitempty"`
+	Fields    map[string]string `json:"fields,omitempty"`
+	ExpiresAt string            `json:"expires_at,omitempty"`
 }
 
 type setSecretArgs struct {
@@ -39,6 +64,7 @@ type setSecretArgs struct {
 	Value       string   `json:"value" jsonschema:"the secret's plaintext value"`
 	Description string   `json:"description,omitempty"`
 	Tags        []string `json:"tags,omitempty"`
+	ExpiresAt   string   `json:"expires_at,omitempty" jsonschema:"optional YYYY-MM-DD expiry date"`
 }
 
 type setSecretOutput struct {
@@ -72,7 +98,7 @@ func listSecretsHandler(db *store.DB, key *store.APIKey) func(context.Context, *
 		}
 		out := listSecretsOutput{Secrets: []secretMeta{}}
 		for _, s := range secrets {
-			out.Secrets = append(out.Secrets, secretMeta{Name: s.Name, Description: s.Description, Tags: s.Tags, Type: s.Type})
+			out.Secrets = append(out.Secrets, secretMeta{Name: s.Name, Description: s.Description, Tags: s.Tags, Type: s.Type, ExpiresAt: formatExpiresAt(s.ExpiresAt)})
 		}
 		_ = db.WriteAudit(store.AuditEntry{ActorType: "mcp_key", ActorID: key.ID, ActorLabel: key.Name, Action: "read", Detail: "list_secrets", IP: requestIP(req)})
 		return nil, out, nil
@@ -99,7 +125,7 @@ func getSecretHandler(db *store.DB, box *crypto.Box, key *store.APIKey) func(con
 				return nil, getSecretOutput{}, err
 			}
 			_ = db.WriteAudit(store.AuditEntry{ActorType: "mcp_key", ActorID: key.ID, ActorLabel: key.Name, Action: "read", SecretName: args.Name, Detail: meta.ID, IP: requestIP(req)})
-			return nil, getSecretOutput{Name: args.Name, Type: meta.Type, Value: value}, nil
+			return nil, getSecretOutput{Name: args.Name, Type: meta.Type, Value: value, ExpiresAt: formatExpiresAt(meta.ExpiresAt)}, nil
 		}
 
 		fields, err := db.GetSecretFields(meta.ID)
@@ -115,7 +141,7 @@ func getSecretHandler(db *store.DB, box *crypto.Box, key *store.APIKey) func(con
 			values[f.Key] = v
 		}
 		_ = db.WriteAudit(store.AuditEntry{ActorType: "mcp_key", ActorID: key.ID, ActorLabel: key.Name, Action: "read", SecretName: args.Name, Detail: meta.ID, IP: requestIP(req)})
-		return nil, getSecretOutput{Name: args.Name, Type: meta.Type, Fields: values}, nil
+		return nil, getSecretOutput{Name: args.Name, Type: meta.Type, Fields: values, ExpiresAt: formatExpiresAt(meta.ExpiresAt)}, nil
 	}
 }
 
@@ -127,6 +153,10 @@ func setSecretHandler(db *store.DB, box *crypto.Box, key *store.APIKey) func(con
 		if args.Name == "" {
 			return nil, setSecretOutput{}, fmt.Errorf("name is required")
 		}
+		expiresAt, err := parseExpiresAt(args.ExpiresAt)
+		if err != nil {
+			return nil, setSecretOutput{}, err
+		}
 		nonce, ciphertext, err := box.Seal(args.Value)
 		if err != nil {
 			return nil, setSecretOutput{}, err
@@ -134,11 +164,11 @@ func setSecretHandler(db *store.DB, box *crypto.Box, key *store.APIKey) func(con
 
 		existingID, _, _, err := db.GetSecretValueByName(args.Name)
 		if err == nil {
-			if updErr := db.UpdateSecret(existingID, args.Description, args.Tags, nonce, ciphertext); updErr != nil {
+			if updErr := db.UpdateSecret(existingID, args.Description, args.Tags, nonce, ciphertext, expiresAt); updErr != nil {
 				return nil, setSecretOutput{}, updErr
 			}
 		} else {
-			if _, createErr := db.CreateSecret(args.Name, args.Description, args.Tags, nonce, ciphertext, "mcp:"+key.Name); createErr != nil {
+			if _, createErr := db.CreateSecret(args.Name, args.Description, args.Tags, nonce, ciphertext, expiresAt, "mcp:"+key.Name); createErr != nil {
 				return nil, setSecretOutput{}, createErr
 			}
 		}

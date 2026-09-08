@@ -40,6 +40,7 @@ export interface SecretMeta {
   description: string
   tags: string[]
   type: SecretType
+  expires_at?: string
   created_by: string
   created_at: string
   updated_at: string
@@ -57,6 +58,7 @@ export interface SecretWithValue extends SecretMeta {
 }
 
 // POST/PUT body: value is used for type "opaque", fields for the other three.
+// expires_at is a plain "YYYY-MM-DD" date, or "" for no expiry.
 export interface SecretInput {
   name: string
   description: string
@@ -64,6 +66,7 @@ export interface SecretInput {
   type: SecretType
   value: string
   fields: SecretField[]
+  expires_at: string
 }
 
 export interface SecretUpdateInput {
@@ -72,6 +75,7 @@ export interface SecretUpdateInput {
   type: SecretType
   value: string
   fields: SecretField[]
+  expires_at: string
 }
 
 export interface TotpCodeResponse {

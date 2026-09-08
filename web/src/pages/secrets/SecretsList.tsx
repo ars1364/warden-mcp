@@ -101,6 +101,7 @@ export function SecretsList() {
                 <th className="px-4 py-2 font-medium">Name</th>
                 <th className="px-4 py-2 font-medium">Tags</th>
                 <th className="px-4 py-2 font-medium">Value</th>
+                <th className="px-4 py-2 font-medium">Expires</th>
                 <th className="px-4 py-2 font-medium">Updated</th>
                 <th className="px-4 py-2 font-medium">Actions</th>
               </tr>

@@ -8,6 +8,7 @@ import { TagChips } from '../../components/common/TagChips'
 import { Button } from '../../components/common/Button'
 import { TypeBadge } from './TypeBadge'
 import { TotpCodeButton } from './TotpCodeButton'
+import { ExpiryBadge } from './ExpiryBadge'
 
 interface SecretRowProps {
   secret: SecretMeta
@@ -66,6 +67,9 @@ export function SecretRow({ secret, onEdit, onDelete }: SecretRowProps) {
             <SecretValueCell type={secret.type} detail={detail} revealed={revealed} onToggle={handleToggleReveal} />
           )}
         </div>
+      </td>
+      <td className="px-4 py-3 align-top">
+        <ExpiryBadge expiresAt={secret.expires_at} />
       </td>
       <td className="px-4 py-3 align-top text-xs text-text-muted">
         {new Date(secret.updated_at).toLocaleString()}

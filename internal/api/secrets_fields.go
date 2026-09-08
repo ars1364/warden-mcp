@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/ars1364/warden-mcp/internal/authn"
 	"github.com/ars1364/warden-mcp/internal/store"
@@ -23,6 +24,7 @@ type secretFieldOutput struct {
 
 // secretRequest is shared by create and update. Value is used for type=opaque only; Fields
 // is used for structured/totp/reference only. The unused one is simply omitted by the caller.
+// ExpiresAt is a plain "YYYY-MM-DD" date, or "" for no expiry.
 type secretRequest struct {
 	Name        string             `json:"name"`
 	Description string             `json:"description"`
@@ -30,6 +32,20 @@ type secretRequest struct {
 	Type        string             `json:"type"`
 	Value       string             `json:"value"`
 	Fields      []secretFieldInput `json:"fields"`
+	ExpiresAt   string             `json:"expires_at"`
+}
+
+// parseExpiresAt turns the request's "YYYY-MM-DD" (or "") into the *time.Time the store
+// layer wants, expressed as UTC midnight on that date.
+func parseExpiresAt(s string) (*time.Time, error) {
+	if s == "" {
+		return nil, nil
+	}
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return nil, fmt.Errorf("expires_at must be a YYYY-MM-DD date")
+	}
+	return &t, nil
 }
 
 // secretDetailResponse is what GET /secrets/{id} returns: metadata plus the decrypted value
