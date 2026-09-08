@@ -54,8 +54,24 @@ func writeUnauthorized(w http.ResponseWriter) {
 }
 
 func clientIP(r *http.Request) string {
-	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-		return strings.Split(fwd, ",")[0]
+	if ip := clientIPFromHeader(r.Header); ip != "" {
+		return ip
 	}
 	return r.RemoteAddr
+}
+
+// clientIPFromHeader reads the leftmost X-Forwarded-For hop, falling back to X-Real-IP.
+// Used both for the raw *http.Request seen by authMiddleware and for the mcp SDK's
+// per-tool-call RequestExtra.Header, which only carries headers (no RemoteAddr).
+//
+// NOTE: this box's nginx sits behind an xray Reality fallback relay with no PROXY
+// protocol configured on the fallback dest, so as deployed today nginx's own $remote_addr
+// (and therefore the X-Real-IP/X-Forwarded-For it sets) is 127.0.0.1 for every request,
+// legitimate or not. This helper is correct; the IP it returns is only as good as what
+// nginx was given. See the 2026-09-08 audit-log IP conversation for the proxy_protocol fix.
+func clientIPFromHeader(h http.Header) string {
+	if fwd := h.Get("X-Forwarded-For"); fwd != "" {
+		return strings.TrimSpace(strings.Split(fwd, ",")[0])
+	}
+	return h.Get("X-Real-IP")
 }

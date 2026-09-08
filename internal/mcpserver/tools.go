@@ -54,8 +54,18 @@ func hasScope(key *store.APIKey, scope string) bool {
 	return false
 }
 
+// requestIP pulls the caller's IP out of the mcp SDK's per-call RequestExtra, which only
+// carries the HTTP header (not RemoteAddr) — see clientIPFromHeader in middleware.go for the
+// caveat about what nginx is actually able to report on this host.
+func requestIP(req *mcp.CallToolRequest) string {
+	if req == nil || req.Extra == nil {
+		return ""
+	}
+	return clientIPFromHeader(req.Extra.Header)
+}
+
 func listSecretsHandler(db *store.DB, key *store.APIKey) func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, listSecretsOutput, error) {
-	return func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, listSecretsOutput, error) {
+	return func(_ context.Context, req *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, listSecretsOutput, error) {
 		secrets, err := db.ListSecrets()
 		if err != nil {
 			return nil, listSecretsOutput{}, err
@@ -64,13 +74,13 @@ func listSecretsHandler(db *store.DB, key *store.APIKey) func(context.Context, *
 		for _, s := range secrets {
 			out.Secrets = append(out.Secrets, secretMeta{Name: s.Name, Description: s.Description, Tags: s.Tags, Type: s.Type})
 		}
-		_ = db.WriteAudit(store.AuditEntry{ActorType: "mcp_key", ActorID: key.ID, ActorLabel: key.Name, Action: "read", Detail: "list_secrets"})
+		_ = db.WriteAudit(store.AuditEntry{ActorType: "mcp_key", ActorID: key.ID, ActorLabel: key.Name, Action: "read", Detail: "list_secrets", IP: requestIP(req)})
 		return nil, out, nil
 	}
 }
 
 func getSecretHandler(db *store.DB, box *crypto.Box, key *store.APIKey) func(context.Context, *mcp.CallToolRequest, getSecretArgs) (*mcp.CallToolResult, getSecretOutput, error) {
-	return func(_ context.Context, _ *mcp.CallToolRequest, args getSecretArgs) (*mcp.CallToolResult, getSecretOutput, error) {
+	return func(_ context.Context, req *mcp.CallToolRequest, args getSecretArgs) (*mcp.CallToolResult, getSecretOutput, error) {
 		if !hasScope(key, "read") {
 			return nil, getSecretOutput{}, fmt.Errorf("api key %q lacks read scope", key.Name)
 		}
@@ -88,7 +98,7 @@ func getSecretHandler(db *store.DB, box *crypto.Box, key *store.APIKey) func(con
 			if err != nil {
 				return nil, getSecretOutput{}, err
 			}
-			_ = db.WriteAudit(store.AuditEntry{ActorType: "mcp_key", ActorID: key.ID, ActorLabel: key.Name, Action: "read", SecretName: args.Name, Detail: meta.ID})
+			_ = db.WriteAudit(store.AuditEntry{ActorType: "mcp_key", ActorID: key.ID, ActorLabel: key.Name, Action: "read", SecretName: args.Name, Detail: meta.ID, IP: requestIP(req)})
 			return nil, getSecretOutput{Name: args.Name, Type: meta.Type, Value: value}, nil
 		}
 
@@ -104,13 +114,13 @@ func getSecretHandler(db *store.DB, box *crypto.Box, key *store.APIKey) func(con
 			}
 			values[f.Key] = v
 		}
-		_ = db.WriteAudit(store.AuditEntry{ActorType: "mcp_key", ActorID: key.ID, ActorLabel: key.Name, Action: "read", SecretName: args.Name, Detail: meta.ID})
+		_ = db.WriteAudit(store.AuditEntry{ActorType: "mcp_key", ActorID: key.ID, ActorLabel: key.Name, Action: "read", SecretName: args.Name, Detail: meta.ID, IP: requestIP(req)})
 		return nil, getSecretOutput{Name: args.Name, Type: meta.Type, Fields: values}, nil
 	}
 }
 
 func setSecretHandler(db *store.DB, box *crypto.Box, key *store.APIKey) func(context.Context, *mcp.CallToolRequest, setSecretArgs) (*mcp.CallToolResult, setSecretOutput, error) {
-	return func(_ context.Context, _ *mcp.CallToolRequest, args setSecretArgs) (*mcp.CallToolResult, setSecretOutput, error) {
+	return func(_ context.Context, req *mcp.CallToolRequest, args setSecretArgs) (*mcp.CallToolResult, setSecretOutput, error) {
 		if !hasScope(key, "write") {
 			return nil, setSecretOutput{}, fmt.Errorf("api key %q lacks write scope", key.Name)
 		}
@@ -132,7 +142,7 @@ func setSecretHandler(db *store.DB, box *crypto.Box, key *store.APIKey) func(con
 				return nil, setSecretOutput{}, createErr
 			}
 		}
-		_ = db.WriteAudit(store.AuditEntry{ActorType: "mcp_key", ActorID: key.ID, ActorLabel: key.Name, Action: "update", SecretName: args.Name})
+		_ = db.WriteAudit(store.AuditEntry{ActorType: "mcp_key", ActorID: key.ID, ActorLabel: key.Name, Action: "update", SecretName: args.Name, IP: requestIP(req)})
 		return nil, setSecretOutput{Name: args.Name}, nil
 	}
 }

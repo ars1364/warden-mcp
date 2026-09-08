@@ -23,7 +23,7 @@ type getTOTPCodeOutput struct {
 // getTOTPCodeHandler computes the current 6-digit code for a vaulted totp seed without ever
 // putting the seed itself in the tool result — the convenience path for routine 2FA logins.
 func getTOTPCodeHandler(db *store.DB, box *crypto.Box, key *store.APIKey) func(context.Context, *mcp.CallToolRequest, getTOTPCodeArgs) (*mcp.CallToolResult, getTOTPCodeOutput, error) {
-	return func(_ context.Context, _ *mcp.CallToolRequest, args getTOTPCodeArgs) (*mcp.CallToolResult, getTOTPCodeOutput, error) {
+	return func(_ context.Context, req *mcp.CallToolRequest, args getTOTPCodeArgs) (*mcp.CallToolResult, getTOTPCodeOutput, error) {
 		if !hasScope(key, "read") {
 			return nil, getTOTPCodeOutput{}, fmt.Errorf("api key %q lacks read scope", key.Name)
 		}
@@ -57,7 +57,7 @@ func getTOTPCodeHandler(db *store.DB, box *crypto.Box, key *store.APIKey) func(c
 		if err != nil {
 			return nil, getTOTPCodeOutput{}, err
 		}
-		_ = db.WriteAudit(store.AuditEntry{ActorType: "mcp_key", ActorID: key.ID, ActorLabel: key.Name, Action: "read", SecretName: args.Name, Detail: "totp_code"})
+		_ = db.WriteAudit(store.AuditEntry{ActorType: "mcp_key", ActorID: key.ID, ActorLabel: key.Name, Action: "read", SecretName: args.Name, Detail: "totp_code", IP: requestIP(req)})
 		return nil, getTOTPCodeOutput{Name: args.Name, Code: code, SecondsRemaining: secondsRemaining}, nil
 	}
 }
@@ -77,7 +77,7 @@ type setCredentialOutput struct {
 // setCredentialHandler upserts a structured/totp/reference secret. set_secret stays the
 // single-value (opaque) tool; this is its multi-field counterpart.
 func setCredentialHandler(db *store.DB, box *crypto.Box, key *store.APIKey) func(context.Context, *mcp.CallToolRequest, setCredentialArgs) (*mcp.CallToolResult, setCredentialOutput, error) {
-	return func(_ context.Context, _ *mcp.CallToolRequest, args setCredentialArgs) (*mcp.CallToolResult, setCredentialOutput, error) {
+	return func(_ context.Context, req *mcp.CallToolRequest, args setCredentialArgs) (*mcp.CallToolResult, setCredentialOutput, error) {
 		if !hasScope(key, "write") {
 			return nil, setCredentialOutput{}, fmt.Errorf("api key %q lacks write scope", key.Name)
 		}
@@ -120,7 +120,7 @@ func setCredentialHandler(db *store.DB, box *crypto.Box, key *store.APIKey) func
 			return nil, setCredentialOutput{}, err
 		}
 
-		_ = db.WriteAudit(store.AuditEntry{ActorType: "mcp_key", ActorID: key.ID, ActorLabel: key.Name, Action: "update", SecretName: args.Name})
+		_ = db.WriteAudit(store.AuditEntry{ActorType: "mcp_key", ActorID: key.ID, ActorLabel: key.Name, Action: "update", SecretName: args.Name, IP: requestIP(req)})
 		return nil, setCredentialOutput{Name: args.Name}, nil
 	}
 }
