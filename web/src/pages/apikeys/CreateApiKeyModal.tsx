@@ -1,12 +1,13 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../../lib/api'
 import { errorMessage } from '../../lib/errors'
-import type { ApiKeyCreated, ApiKeyScope } from '../../types/api'
+import type { ApiKeyCreated, ApiKeyScope, HostMeta, ResourceGrant, SecretMeta } from '../../types/api'
 import { Modal } from '../../components/common/Modal'
 import { Button } from '../../components/common/Button'
 import { ErrorBanner } from '../../components/common/ErrorBanner'
 import { FormField, TextInput } from '../../components/common/FormField'
 import { CopyButton } from '../../components/common/CopyButton'
+import { ResourceAccessPicker, initGrantState, grantStateToPayload, type GrantState } from '../../components/common/ResourceAccessPicker'
 
 const ALL_SCOPES: ApiKeyScope[] = ['read', 'write']
 
@@ -18,9 +19,33 @@ interface CreateApiKeyModalProps {
 export function CreateApiKeyModal({ onClose, onCreated }: CreateApiKeyModalProps) {
   const [name, setName] = useState('')
   const [scopes, setScopes] = useState<ApiKeyScope[]>(['read'])
+  const [secretNames, setSecretNames] = useState<string[]>([])
+  const [hostNames, setHostNames] = useState<string[]>([])
+  const [secretState, setSecretState] = useState<GrantState>({})
+  const [hostState, setHostState] = useState<GrantState>({})
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [created, setCreated] = useState<ApiKeyCreated | null>(null)
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [secrets, hosts] = await Promise.all([
+          api.get<SecretMeta[]>('/api/secrets'),
+          api.get<HostMeta[]>('/api/hosts'),
+        ])
+        const sNames = secrets.map((s) => s.name)
+        const hNames = hosts.map((h) => h.name)
+        setSecretNames(sNames)
+        setHostNames(hNames)
+        setSecretState(initGrantState(sNames, [])) // no saved grants yet — starts fully checked
+        setHostState(initGrantState(hNames, []))
+      } catch (err) {
+        setError(errorMessage(err))
+      }
+    }
+    load()
+  }, [])
 
   function toggleScope(scope: ApiKeyScope) {
     setScopes((prev) =>
@@ -34,6 +59,11 @@ export function CreateApiKeyModal({ onClose, onCreated }: CreateApiKeyModalProps
     setSubmitting(true)
     try {
       const result = await api.post<ApiKeyCreated>('/api/apikeys', { name, scopes })
+      const grants: ResourceGrant[] = [
+        ...grantStateToPayload(secretNames, secretState).map((g) => ({ resource_type: 'secret' as const, ...g })),
+        ...grantStateToPayload(hostNames, hostState).map((g) => ({ resource_type: 'host' as const, ...g })),
+      ]
+      await api.put(`/api/apikeys/${result.id}/access`, { grants })
       setCreated(result)
     } catch (err) {
       setError(errorMessage(err))
@@ -68,7 +98,7 @@ export function CreateApiKeyModal({ onClose, onCreated }: CreateApiKeyModalProps
   }
 
   return (
-    <Modal title="Create API key" onClose={onClose}>
+    <Modal title="Create API key" onClose={onClose} widthClass="max-w-xl">
       <form onSubmit={handleSubmit} className="space-y-4">
         <FormField label="Name">
           <TextInput value={name} onChange={(e) => setName(e.target.value)} required />
@@ -87,6 +117,17 @@ export function CreateApiKeyModal({ onClose, onCreated }: CreateApiKeyModalProps
               </label>
             ))}
           </div>
+        </FormField>
+
+        <FormField label="Access (defaults to everything)">
+          <ResourceAccessPicker
+            secretNames={secretNames}
+            hostNames={hostNames}
+            secretState={secretState}
+            hostState={hostState}
+            onChangeSecretState={setSecretState}
+            onChangeHostState={setHostState}
+          />
         </FormField>
 
         <ErrorBanner message={error} />

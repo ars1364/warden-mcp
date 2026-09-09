@@ -170,5 +170,6 @@ export type ResourceType = 'secret' | 'host'
 export interface ResourceGrant {
   resource_type: ResourceType
   resource_name: string
+  can_read: boolean
   can_write: boolean
 }

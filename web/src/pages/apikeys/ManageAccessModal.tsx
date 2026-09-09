@@ -5,7 +5,7 @@ import type { ApiKeyMeta, HostMeta, ResourceGrant, SecretMeta } from '../../type
 import { Modal } from '../../components/common/Modal'
 import { Button } from '../../components/common/Button'
 import { ErrorBanner } from '../../components/common/ErrorBanner'
-import { GrantListEditor, type GrantRow } from '../../components/common/GrantListEditor'
+import { ResourceAccessPicker, initGrantState, grantStateToPayload, type GrantState } from '../../components/common/ResourceAccessPicker'
 
 interface ManageAccessModalProps {
   apiKey: ApiKeyMeta
@@ -15,8 +15,8 @@ interface ManageAccessModalProps {
 export function ManageAccessModal({ apiKey, onClose }: ManageAccessModalProps) {
   const [secretNames, setSecretNames] = useState<string[]>([])
   const [hostNames, setHostNames] = useState<string[]>([])
-  const [secretGrants, setSecretGrants] = useState<GrantRow[]>([])
-  const [hostGrants, setHostGrants] = useState<GrantRow[]>([])
+  const [secretState, setSecretState] = useState<GrantState>({})
+  const [hostState, setHostState] = useState<GrantState>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -31,14 +31,12 @@ export function ManageAccessModal({ apiKey, onClose }: ManageAccessModalProps) {
           api.get<HostMeta[]>('/api/hosts'),
           api.get<ResourceGrant[]>(`/api/apikeys/${apiKey.id}/access`),
         ])
-        setSecretNames(secrets.map((s) => s.name))
-        setHostNames(hosts.map((h) => h.name))
-        setSecretGrants(
-          grants.filter((g) => g.resource_type === 'secret').map((g) => ({ name: g.resource_name, canWrite: g.can_write })),
-        )
-        setHostGrants(
-          grants.filter((g) => g.resource_type === 'host').map((g) => ({ name: g.resource_name, canWrite: g.can_write })),
-        )
+        const sNames = secrets.map((s) => s.name)
+        const hNames = hosts.map((h) => h.name)
+        setSecretNames(sNames)
+        setHostNames(hNames)
+        setSecretState(initGrantState(sNames, grants.filter((g) => g.resource_type === 'secret')))
+        setHostState(initGrantState(hNames, grants.filter((g) => g.resource_type === 'host')))
       } catch (err) {
         setError(errorMessage(err))
       } finally {
@@ -53,8 +51,8 @@ export function ManageAccessModal({ apiKey, onClose }: ManageAccessModalProps) {
     setSubmitting(true)
     try {
       const grants: ResourceGrant[] = [
-        ...secretGrants.filter((g) => g.name).map((g) => ({ resource_type: 'secret' as const, resource_name: g.name, can_write: g.canWrite })),
-        ...hostGrants.filter((g) => g.name).map((g) => ({ resource_type: 'host' as const, resource_name: g.name, can_write: g.canWrite })),
+        ...grantStateToPayload(secretNames, secretState).map((g) => ({ resource_type: 'secret' as const, ...g })),
+        ...grantStateToPayload(hostNames, hostState).map((g) => ({ resource_type: 'host' as const, ...g })),
       ]
       await api.put(`/api/apikeys/${apiKey.id}/access`, { grants })
       onClose()
@@ -66,26 +64,19 @@ export function ManageAccessModal({ apiKey, onClose }: ManageAccessModalProps) {
   }
 
   return (
-    <Modal title={`Access — ${apiKey.name}`} onClose={onClose} widthClass="max-w-lg">
+    <Modal title={`Access — ${apiKey.name}`} onClose={onClose} widthClass="max-w-xl">
       {loading ? (
         <div className="text-sm text-text-muted">Loading…</div>
       ) : (
-        <div className="space-y-5">
-          <p className="text-xs text-text-muted">
-            Leaving a section empty means unrestricted (this key can reach every secret/host, same as today).
-            Adding even one grant turns that section into an allowlist — only listed names are visible to this
-            key at all.
-          </p>
-
-          <div>
-            <h3 className="mb-2 text-sm font-semibold text-text-bright">Secrets</h3>
-            <GrantListEditor label="Secret" options={secretNames} grants={secretGrants} onChange={setSecretGrants} />
-          </div>
-
-          <div>
-            <h3 className="mb-2 text-sm font-semibold text-text-bright">Hosts</h3>
-            <GrantListEditor label="Host" options={hostNames} grants={hostGrants} onChange={setHostGrants} />
-          </div>
+        <div className="space-y-4">
+          <ResourceAccessPicker
+            secretNames={secretNames}
+            hostNames={hostNames}
+            secretState={secretState}
+            hostState={hostState}
+            onChangeSecretState={setSecretState}
+            onChangeHostState={setHostState}
+          />
 
           <ErrorBanner message={error} />
 

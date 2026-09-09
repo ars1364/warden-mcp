@@ -11,6 +11,7 @@ import (
 type resourceGrantDTO struct {
 	ResourceType string `json:"resource_type"`
 	ResourceName string `json:"resource_name"`
+	CanRead      bool   `json:"can_read"`
 	CanWrite     bool   `json:"can_write"`
 }
 
@@ -27,7 +28,7 @@ func (s *Server) handleGetAPIKeyAccess(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]resourceGrantDTO, len(grants))
 	for i, g := range grants {
-		out[i] = resourceGrantDTO{ResourceType: g.ResourceType, ResourceName: g.ResourceName, CanWrite: g.CanWrite}
+		out[i] = resourceGrantDTO{ResourceType: g.ResourceType, ResourceName: g.ResourceName, CanRead: g.CanRead, CanWrite: g.CanWrite}
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -54,9 +55,9 @@ func (s *Server) handleSetAPIKeyAccess(w http.ResponseWriter, r *http.Request) {
 		}
 		switch g.ResourceType {
 		case store.ResourceSecret:
-			secretGrants = append(secretGrants, store.ResourceGrant{ResourceName: g.ResourceName, CanWrite: g.CanWrite})
+			secretGrants = append(secretGrants, store.ResourceGrant{ResourceName: g.ResourceName, CanRead: g.CanRead, CanWrite: g.CanWrite})
 		case store.ResourceHost:
-			hostGrants = append(hostGrants, store.ResourceGrant{ResourceName: g.ResourceName, CanWrite: g.CanWrite})
+			hostGrants = append(hostGrants, store.ResourceGrant{ResourceName: g.ResourceName, CanRead: g.CanRead, CanWrite: g.CanWrite})
 		default:
 			writeError(w, http.StatusBadRequest, "INVALID_BODY", "resource_type must be \"secret\" or \"host\"")
 			return

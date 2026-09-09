@@ -110,11 +110,15 @@ CREATE INDEX IF NOT EXISTS idx_host_addresses_address ON host_addresses(address)
 -- becomes an allowlist: it can only see/act on the resource_names present, and only write
 -- to ones where can_write=1. This is enforced in the MCP tool layer only — the web UI
 -- (JWT-authenticated human) always has full access; it's the one configuring these grants.
+-- `can_read` is added via addColumnIfMissing in db.go for pre-existing databases; CREATE
+-- TABLE only covers fresh installs. Read and write are independent per row (a grant can be
+-- write-only, e.g. a rotation-only agent that never reads the value back).
 CREATE TABLE IF NOT EXISTS api_key_resource_access (
     id TEXT PRIMARY KEY,
     api_key_id TEXT NOT NULL REFERENCES mcp_api_keys(id) ON DELETE CASCADE,
     resource_type TEXT NOT NULL,
     resource_name TEXT NOT NULL,
+    can_read INTEGER NOT NULL DEFAULT 1,
     can_write INTEGER NOT NULL DEFAULT 0,
     UNIQUE(api_key_id, resource_type, resource_name)
 );

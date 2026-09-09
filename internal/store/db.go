@@ -41,6 +41,9 @@ func Open(path string) (*DB, error) {
 	if err := addColumnIfMissing(sqlDB, "secrets", "expires_at", `ALTER TABLE secrets ADD COLUMN expires_at TIMESTAMP`); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
+	if err := addColumnIfMissing(sqlDB, "api_key_resource_access", "can_read", `ALTER TABLE api_key_resource_access ADD COLUMN can_read INTEGER NOT NULL DEFAULT 1`); err != nil {
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
 
 	return &DB{sqlDB}, nil
 }
