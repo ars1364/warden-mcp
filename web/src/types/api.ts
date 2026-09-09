@@ -111,3 +111,56 @@ export interface AuditEntry {
   ip: string
   detail: string
 }
+
+export type HostType = 'physical' | 'vm' | 'vps' | 'container' | 'switch' | 'router' | 'other'
+export type HostStatus = 'active' | 'maintenance' | 'decommissioned'
+
+export interface HostAddress {
+  label: string
+  address: string
+}
+
+// GET /api/hosts (list) and /api/hosts/:id (detail) both return this shape — addresses are
+// included on both since, unlike secret values, they aren't sensitive.
+export interface HostMeta {
+  id: string
+  name: string
+  host_type: HostType
+  status: HostStatus
+  description: string
+  tags: string[]
+  parent_host_id?: string
+  parent_host_name?: string
+  location_kind: string
+  cloud_provider: string
+  cloud_account: string
+  physical_location: string
+  ssh_port: number
+  ssh_username: string
+  ssh_secret_name: string
+  ssh_jump_host_id?: string
+  ssh_jump_host_name?: string
+  addresses?: HostAddress[]
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+// POST/PUT body. Parent/jump hosts are referenced by name. addresses replaces the full set.
+export interface HostInput {
+  name: string
+  host_type: HostType
+  status: HostStatus
+  description: string
+  tags: string[]
+  parent_host_name: string
+  location_kind: string
+  cloud_provider: string
+  cloud_account: string
+  physical_location: string
+  ssh_port: number
+  ssh_username: string
+  ssh_secret_name: string
+  ssh_jump_host_name: string
+  addresses: HostAddress[]
+}

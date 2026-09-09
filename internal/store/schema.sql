@@ -65,3 +65,41 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
 CREATE INDEX IF NOT EXISTS idx_audit_log_ts ON audit_log(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_secrets_name ON secrets(name);
+
+-- Asset inventory: physical machines, VMs, VPSes, network gear. parent_host_id models
+-- "this VM lives inside that physical host"; ssh_secret_name POINTS at a row in `secrets`
+-- by name rather than duplicating credential material — the inventory never stores a key
+-- or password itself, only where to find one.
+CREATE TABLE IF NOT EXISTS hosts (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    host_type TEXT NOT NULL DEFAULT 'other',
+    status TEXT NOT NULL DEFAULT 'active',
+    description TEXT NOT NULL DEFAULT '',
+    tags TEXT NOT NULL DEFAULT '[]',
+    parent_host_id TEXT REFERENCES hosts(id) ON DELETE SET NULL,
+    location_kind TEXT NOT NULL DEFAULT '',
+    cloud_provider TEXT NOT NULL DEFAULT '',
+    cloud_account TEXT NOT NULL DEFAULT '',
+    physical_location TEXT NOT NULL DEFAULT '',
+    ssh_port INTEGER NOT NULL DEFAULT 22,
+    ssh_username TEXT NOT NULL DEFAULT '',
+    ssh_secret_name TEXT NOT NULL DEFAULT '',
+    ssh_jump_host_id TEXT REFERENCES hosts(id) ON DELETE SET NULL,
+    created_by TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS host_addresses (
+    id TEXT PRIMARY KEY,
+    host_id TEXT NOT NULL REFERENCES hosts(id) ON DELETE CASCADE,
+    label TEXT NOT NULL,
+    address TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_hosts_name ON hosts(name);
+CREATE INDEX IF NOT EXISTS idx_hosts_parent ON hosts(parent_host_id);
+CREATE INDEX IF NOT EXISTS idx_host_addresses_host_id ON host_addresses(host_id, position);
+CREATE INDEX IF NOT EXISTS idx_host_addresses_address ON host_addresses(address);

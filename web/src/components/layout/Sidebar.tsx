@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext'
 
 const navItems = [
   { to: '/', label: 'Secrets', end: true },
+  { to: '/hosts', label: 'Hosts', end: false },
   { to: '/apikeys', label: 'API Keys', end: false },
   { to: '/audit', label: 'Audit Log', end: false },
   { to: '/settings', label: 'Account Settings', end: false },

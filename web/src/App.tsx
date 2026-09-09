@@ -5,6 +5,7 @@ import { Setup } from './pages/Setup'
 import { Login } from './pages/Login'
 import { Dashboard } from './pages/Dashboard'
 import { SecretsList } from './pages/secrets/SecretsList'
+import { HostsList } from './pages/hosts/HostsList'
 import { ApiKeysList } from './pages/apikeys/ApiKeysList'
 import { AuditLog } from './pages/audit/AuditLog'
 import { AccountSettings } from './pages/settings/AccountSettings'
@@ -25,6 +26,7 @@ export default function App() {
             }
           >
             <Route index element={<SecretsList />} />
+            <Route path="hosts" element={<HostsList />} />
             <Route path="apikeys" element={<ApiKeysList />} />
             <Route path="audit" element={<AuditLog />} />
             <Route path="settings" element={<AccountSettings />} />
