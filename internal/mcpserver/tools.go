@@ -80,6 +80,24 @@ func hasScope(key *store.APIKey, scope string) bool {
 	return false
 }
 
+// checkResourceAccess enforces the per-key row-level allowlist (store.ResourceAccess). A key
+// with no grants for resourceType is unrestricted — this only starts denying once the admin
+// has granted it at least one resource of that type. A denied read is reported exactly like
+// "doesn't exist", so a restricted key can't tell those two cases apart.
+func checkResourceAccess(db *store.DB, key *store.APIKey, resourceType, name string, needWrite bool) error {
+	canRead, canWrite, err := db.ResourceAccess(key.ID, resourceType, name)
+	if err != nil {
+		return err
+	}
+	if !canRead {
+		return fmt.Errorf("%s %q not found", resourceType, name)
+	}
+	if needWrite && !canWrite {
+		return fmt.Errorf("api key %q does not have write access to %s %q", key.Name, resourceType, name)
+	}
+	return nil
+}
+
 // requestIP pulls the caller's IP out of the mcp SDK's per-call RequestExtra, which only
 // carries the HTTP header (not RemoteAddr) — see clientIPFromHeader in middleware.go for the
 // caveat about what nginx is actually able to report on this host.
@@ -98,6 +116,9 @@ func listSecretsHandler(db *store.DB, key *store.APIKey) func(context.Context, *
 		}
 		out := listSecretsOutput{Secrets: []secretMeta{}}
 		for _, s := range secrets {
+			if canRead, _, err := db.ResourceAccess(key.ID, store.ResourceSecret, s.Name); err != nil || !canRead {
+				continue
+			}
 			out.Secrets = append(out.Secrets, secretMeta{Name: s.Name, Description: s.Description, Tags: s.Tags, Type: s.Type, ExpiresAt: formatExpiresAt(s.ExpiresAt)})
 		}
 		_ = db.WriteAudit(store.AuditEntry{ActorType: "mcp_key", ActorID: key.ID, ActorLabel: key.Name, Action: "read", Detail: "list_secrets", IP: requestIP(req)})
@@ -113,6 +134,9 @@ func getSecretHandler(db *store.DB, box *crypto.Box, key *store.APIKey) func(con
 		meta, err := db.GetSecretMetaByName(args.Name)
 		if err != nil {
 			return nil, getSecretOutput{}, fmt.Errorf("secret %q not found", args.Name)
+		}
+		if err := checkResourceAccess(db, key, store.ResourceSecret, args.Name, false); err != nil {
+			return nil, getSecretOutput{}, err
 		}
 
 		if meta.Type == store.TypeOpaque {
@@ -152,6 +176,9 @@ func setSecretHandler(db *store.DB, box *crypto.Box, key *store.APIKey) func(con
 		}
 		if args.Name == "" {
 			return nil, setSecretOutput{}, fmt.Errorf("name is required")
+		}
+		if err := checkResourceAccess(db, key, store.ResourceSecret, args.Name, true); err != nil {
+			return nil, setSecretOutput{}, err
 		}
 		expiresAt, err := parseExpiresAt(args.ExpiresAt)
 		if err != nil {

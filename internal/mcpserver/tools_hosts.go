@@ -119,7 +119,7 @@ func resolveHostNameToID(db *store.DB, name string) (*string, error) {
 	return &h.ID, nil
 }
 
-func listHostsHandler(db *store.DB) func(context.Context, *mcp.CallToolRequest, listHostsArgs) (*mcp.CallToolResult, listHostsOutput, error) {
+func listHostsHandler(db *store.DB, key *store.APIKey) func(context.Context, *mcp.CallToolRequest, listHostsArgs) (*mcp.CallToolResult, listHostsOutput, error) {
 	return func(_ context.Context, _ *mcp.CallToolRequest, args listHostsArgs) (*mcp.CallToolResult, listHostsOutput, error) {
 		hosts, err := db.ListHosts()
 		if err != nil {
@@ -131,6 +131,9 @@ func listHostsHandler(db *store.DB) func(context.Context, *mcp.CallToolRequest, 
 				continue
 			}
 			if args.Tag != "" && !containsTag(h.Tags, args.Tag) {
+				continue
+			}
+			if canRead, _, err := db.ResourceAccess(key.ID, store.ResourceHost, h.Name); err != nil || !canRead {
 				continue
 			}
 			out.Hosts = append(out.Hosts, toHostSummary(db, h))
@@ -148,11 +151,14 @@ func containsTag(tags []string, tag string) bool {
 	return false
 }
 
-func getHostHandler(db *store.DB) func(context.Context, *mcp.CallToolRequest, getHostArgs) (*mcp.CallToolResult, hostDetail, error) {
+func getHostHandler(db *store.DB, key *store.APIKey) func(context.Context, *mcp.CallToolRequest, getHostArgs) (*mcp.CallToolResult, hostDetail, error) {
 	return func(_ context.Context, _ *mcp.CallToolRequest, args getHostArgs) (*mcp.CallToolResult, hostDetail, error) {
 		h, err := db.GetHostByName(args.Name)
 		if err != nil {
 			return nil, hostDetail{}, fmt.Errorf("host %q not found", args.Name)
+		}
+		if err := checkResourceAccess(db, key, store.ResourceHost, args.Name, false); err != nil {
+			return nil, hostDetail{}, err
 		}
 		addrs, err := db.GetHostAddresses(h.ID)
 		if err != nil {
@@ -180,6 +186,9 @@ func setHostHandler(db *store.DB, key *store.APIKey) func(context.Context, *mcp.
 		}
 		if args.Name == "" {
 			return nil, setHostOutput{}, fmt.Errorf("name is required")
+		}
+		if err := checkResourceAccess(db, key, store.ResourceHost, args.Name, true); err != nil {
+			return nil, setHostOutput{}, err
 		}
 		parentID, err := resolveHostNameToID(db, args.ParentHostName)
 		if err != nil {

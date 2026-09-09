@@ -58,6 +58,8 @@ func NewRouter(db *store.DB, box *crypto.Box, jwt *authn.JWTIssuer, env string) 
 			pr.Get("/apikeys", s.handleListAPIKeys)
 			pr.Post("/apikeys", s.handleCreateAPIKey)
 			pr.Delete("/apikeys/{id}", s.handleRevokeAPIKey)
+			pr.Get("/apikeys/{id}/access", s.handleGetAPIKeyAccess)
+			pr.Put("/apikeys/{id}/access", s.handleSetAPIKeyAccess)
 
 			pr.Get("/audit", s.handleListAudit)
 		})

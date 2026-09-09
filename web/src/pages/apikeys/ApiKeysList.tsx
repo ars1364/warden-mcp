@@ -6,6 +6,7 @@ import { Button } from '../../components/common/Button'
 import { ErrorBanner } from '../../components/common/ErrorBanner'
 import { ConfirmDialog } from '../../components/common/ConfirmDialog'
 import { CreateApiKeyModal } from './CreateApiKeyModal'
+import { ManageAccessModal } from './ManageAccessModal'
 
 export function ApiKeysList() {
   const [keys, setKeys] = useState<ApiKeyMeta[]>([])
@@ -13,6 +14,7 @@ export function ApiKeysList() {
   const [error, setError] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [pendingRevoke, setPendingRevoke] = useState<ApiKeyMeta | null>(null)
+  const [managingAccess, setManagingAccess] = useState<ApiKeyMeta | null>(null)
 
   async function load() {
     setLoading(true)
@@ -99,9 +101,14 @@ export function ApiKeysList() {
                   </td>
                   <td className="px-4 py-3">
                     {!k.revoked_at && (
-                      <Button variant="danger" onClick={() => setPendingRevoke(k)}>
-                        Revoke
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button variant="secondary" onClick={() => setManagingAccess(k)}>
+                          Access
+                        </Button>
+                        <Button variant="danger" onClick={() => setPendingRevoke(k)}>
+                          Revoke
+                        </Button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -113,6 +120,10 @@ export function ApiKeysList() {
 
       {createOpen && (
         <CreateApiKeyModal onClose={() => setCreateOpen(false)} onCreated={handleCreated} />
+      )}
+
+      {managingAccess && (
+        <ManageAccessModal apiKey={managingAccess} onClose={() => setManagingAccess(null)} />
       )}
 
       {pendingRevoke && (

@@ -44,11 +44,11 @@ func NewHandler(db *store.DB, box *crypto.Box) http.Handler {
 		mcp.AddTool(server, &mcp.Tool{
 			Name:        "list_hosts",
 			Description: "List the host inventory (physical machines, VMs, VPSes, network gear), optionally filtered by host_type or tag. Never returns SSH credentials.",
-		}, listHostsHandler(db))
+		}, listHostsHandler(db, key))
 		mcp.AddTool(server, &mcp.Tool{
 			Name:        "get_host",
 			Description: "Fetch full detail for one host by name: location, addresses, and where its SSH credential lives (a secret name — call get_secret separately to fetch the value).",
-		}, getHostHandler(db))
+		}, getHostHandler(db, key))
 		mcp.AddTool(server, &mcp.Tool{
 			Name:        "set_host",
 			Description: "Create or update a host in the inventory. Requires the write scope.",

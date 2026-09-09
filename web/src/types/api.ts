@@ -164,3 +164,11 @@ export interface HostInput {
   ssh_jump_host_name: string
   addresses: HostAddress[]
 }
+
+export type ResourceType = 'secret' | 'host'
+
+export interface ResourceGrant {
+  resource_type: ResourceType
+  resource_name: string
+  can_write: boolean
+}

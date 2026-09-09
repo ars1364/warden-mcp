@@ -31,6 +31,9 @@ func getTOTPCodeHandler(db *store.DB, box *crypto.Box, key *store.APIKey) func(c
 		if err != nil {
 			return nil, getTOTPCodeOutput{}, fmt.Errorf("secret %q not found", args.Name)
 		}
+		if err := checkResourceAccess(db, key, store.ResourceSecret, args.Name, false); err != nil {
+			return nil, getTOTPCodeOutput{}, err
+		}
 		if meta.Type != store.TypeTOTP {
 			return nil, getTOTPCodeOutput{}, fmt.Errorf("secret %q is not a totp credential", args.Name)
 		}
@@ -84,6 +87,9 @@ func setCredentialHandler(db *store.DB, box *crypto.Box, key *store.APIKey) func
 		}
 		if args.Name == "" {
 			return nil, setCredentialOutput{}, fmt.Errorf("name is required")
+		}
+		if err := checkResourceAccess(db, key, store.ResourceSecret, args.Name, true); err != nil {
+			return nil, setCredentialOutput{}, err
 		}
 		secretType := args.Type
 		if secretType != store.TypeStructured && secretType != store.TypeTOTP && secretType != store.TypeReference {
