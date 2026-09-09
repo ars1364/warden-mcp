@@ -76,7 +76,7 @@ export function HostsList() {
 
   return (
     <div>
-      <div className="mb-5 flex items-center justify-between">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-xl font-semibold text-text-bright">Hosts</h1>
         <Button onClick={handleAdd}>Add host</Button>
       </div>

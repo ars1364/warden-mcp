@@ -76,9 +76,9 @@ export function HostForm({ editing, allHosts, onClose, onSaved }: HostFormProps)
   }
 
   return (
-    <Modal title={editing ? `Edit ${editing.name}` : 'Add host'} onClose={onClose}>
+    <Modal title={editing ? `Edit ${editing.name}` : 'Add host'} onClose={onClose} widthClass="max-w-2xl">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <FormField label="Name">
             <TextInput value={name} onChange={(e) => setName(e.target.value)} disabled={!!editing} required />
           </FormField>
@@ -105,7 +105,7 @@ export function HostForm({ editing, allHosts, onClose, onSaved }: HostFormProps)
           <TagInput tags={tags} onChange={setTags} />
         </FormField>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormField label="Lives inside (parent host)">
             <Select value={parentHostName} onChange={(e) => setParentHostName(e.target.value)}>
               <option value="">— none —</option>
@@ -124,7 +124,7 @@ export function HostForm({ editing, allHosts, onClose, onSaved }: HostFormProps)
           </FormField>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormField label="Cloud provider">
             <TextInput value={cloudProvider} onChange={(e) => setCloudProvider(e.target.value)} placeholder="Hetzner, AWS, OpenStack…" />
           </FormField>
@@ -149,7 +149,7 @@ export function HostForm({ editing, allHosts, onClose, onSaved }: HostFormProps)
           />
         </FormField>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <FormField label="SSH username">
             <TextInput value={sshUsername} onChange={(e) => setSshUsername(e.target.value)} />
           </FormField>
